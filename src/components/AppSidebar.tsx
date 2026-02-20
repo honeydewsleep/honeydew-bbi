@@ -10,6 +10,7 @@ import {
   LogOut,
   ArrowLeftRight,
   BookOpen,
+  ShoppingCart,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
@@ -38,6 +39,7 @@ export function AppSidebar() {
     { title: "Analytics", url: "/analytics", icon: BarChart3, show: isExecutive },
     { title: "Financial Reports", url: "/financial-reports", icon: FileText, show: isExecutive },
     { title: "Customers", url: "/customers", icon: Users, show: isExecutive },
+    { title: "Orders", url: "/orders", icon: ShoppingCart, show: isExecutive },
   ].filter((i) => i.show);
 
   const inventoryNav = [

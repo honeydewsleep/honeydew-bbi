@@ -1,1 +1,10 @@
 project_id = "gjcjoursumblzxzaxuvi"
+
+[functions.shipstation-sync]
+verify_jwt = false
+
+[functions.daily-inventory-snapshot]
+verify_jwt = false
+
+[functions.admin-create-user]
+verify_jwt = false
