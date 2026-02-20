@@ -18,6 +18,7 @@ import UserManagement from "@/pages/UserManagement";
 import SettingsPage from "@/pages/SettingsPage";
 import AdminGuide from "@/pages/AdminGuide";
 import WarehouseGuide from "@/pages/WarehouseGuide";
+import OrdersPage from "@/pages/OrdersPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -43,6 +44,7 @@ function AuthenticatedApp() {
         <Route path="/warehouse" element={<WarehouseInventory />} />
         <Route path="/financial-reports" element={<FinancialReports />} />
         <Route path="/customers" element={<CustomerManagement />} />
+        <Route path="/orders" element={<OrdersPage />} />
         <Route path="/analytics" element={<AdvancedAnalytics />} />
         <Route path="/advanced-inventory" element={<AdvancedInventory />} />
         <Route path="/inventory-history" element={<InventoryHistory />} />

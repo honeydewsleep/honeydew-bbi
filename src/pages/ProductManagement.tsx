@@ -7,11 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Package, Edit, Trash2 } from "lucide-react";
+import { Plus, Search, Package, Edit, Trash2, Download } from "lucide-react";
 import { toast } from "sonner";
+import { exportToCSV } from "@/lib/exportUtils";
 
 export default function ProductManagement() {
   const queryClient = useQueryClient();
@@ -60,7 +60,10 @@ export default function ProductManagement() {
   const filtered = products.filter(
     (p) =>
       p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.sku.toLowerCase().includes(search.toLowerCase())
+      p.sku.toLowerCase().includes(search.toLowerCase()) ||
+      (p.category && p.category.toLowerCase().includes(search.toLowerCase())) ||
+      (p.supplier && p.supplier.toLowerCase().includes(search.toLowerCase())) ||
+      (p.barcode && p.barcode.toLowerCase().includes(search.toLowerCase()))
   );
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -82,6 +85,25 @@ export default function ProductManagement() {
     });
   };
 
+  const handleExport = () => {
+    exportToCSV(
+      filtered.map((p) => ({
+        SKU: p.sku,
+        Name: p.name,
+        Category: p.category || "",
+        Cost: p.cost || 0,
+        Retail: p.retail_price || 0,
+        Wholesale: p.wholesale_price || 0,
+        Stock: p.current_stock || 0,
+        Reorder_Point: p.reorder_point || 10,
+        Supplier: p.supplier || "",
+        Active: p.is_active ? "Yes" : "No",
+      })),
+      "products"
+    );
+    toast.success("Products exported");
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -89,14 +111,19 @@ export default function ProductManagement() {
           <h1 className="text-2xl font-bold text-foreground">Products</h1>
           <p className="text-muted-foreground">Manage your product catalog</p>
         </div>
-        <Button onClick={() => { setEditing(null); setShowForm(true); }}>
-          <Plus className="h-4 w-4 mr-2" /> Add Product
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport}>
+            <Download className="h-4 w-4 mr-2" /> Export
+          </Button>
+          <Button onClick={() => { setEditing(null); setShowForm(true); }}>
+            <Plus className="h-4 w-4 mr-2" /> Add Product
+          </Button>
+        </div>
       </div>
 
-      <div className="relative max-w-sm">
+      <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Search products..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
+        <Input placeholder="Search by name, SKU, category, supplier..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
       </div>
 
       <div className="grid gap-4">
@@ -137,7 +164,6 @@ export default function ProductManagement() {
         ))}
       </div>
 
-      {/* Product Form Dialog */}
       <Dialog open={showForm} onOpenChange={setShowForm}>
         <DialogContent className="max-w-md">
           <DialogHeader>

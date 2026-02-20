@@ -1,15 +1,25 @@
 import { useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DollarSign, TrendingDown, TrendingUp, Users, Package, Wallet } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DollarSign, TrendingDown, TrendingUp, Users, Package, Wallet, Plus } from "lucide-react";
 import { subDays, parseISO, isWithinInterval, format, eachMonthOfInterval } from "date-fns";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { toast } from "sonner";
 
 const CHART_COLORS = ["hsl(221, 83%, 53%)", "hsl(262, 83%, 58%)", "hsl(142, 71%, 45%)", "hsl(38, 92%, 50%)", "hsl(0, 84%, 60%)"];
 
 export default function Dashboard() {
+  const queryClient = useQueryClient();
   const [dateRange] = useState({ from: subDays(new Date(), 30), to: new Date() });
+  const [showTxForm, setShowTxForm] = useState(false);
+  const [editingTx, setEditingTx] = useState<any>(null);
 
   const { data: transactions = [] } = useQuery({
     queryKey: ["transactions"],
@@ -34,6 +44,55 @@ export default function Dashboard() {
       return data || [];
     },
   });
+
+  const upsertTx = useMutation({
+    mutationFn: async (data: any) => {
+      if (editingTx) {
+        const { error } = await supabase.from("transactions").update(data).eq("id", editingTx.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("transactions").insert(data);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      setShowTxForm(false);
+      setEditingTx(null);
+      toast.success(editingTx ? "Transaction updated" : "Transaction created");
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const deleteTx = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("transactions").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      toast.success("Transaction deleted");
+    },
+  });
+
+  const handleTxSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    upsertTx.mutate({
+      type: fd.get("type") as string,
+      amount: parseFloat(fd.get("amount") as string) || 0,
+      description: fd.get("description") as string || null,
+      category: fd.get("category") as string || null,
+      channel: fd.get("channel") as string || null,
+      order_id: fd.get("order_id") as string || null,
+      sku: fd.get("sku") as string || null,
+      quantity: parseInt(fd.get("quantity") as string) || null,
+      customer_id: fd.get("customer_id") as string || null,
+      shipping_cost: parseFloat(fd.get("shipping_cost") as string) || null,
+      unit_shipping_cost: parseFloat(fd.get("unit_shipping_cost") as string) || null,
+      date: fd.get("date") as string || new Date().toISOString().split("T")[0],
+    });
+  };
 
   const filtered = useMemo(() => {
     return transactions.filter((t) => {
@@ -85,9 +144,14 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-muted-foreground">Overview of your business performance</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+          <p className="text-muted-foreground">Overview of your business performance</p>
+        </div>
+        <Button onClick={() => { setEditingTx(null); setShowTxForm(true); }}>
+          <Plus className="h-4 w-4 mr-2" /> Add Transaction
+        </Button>
       </div>
 
       {/* Metric Cards */}
@@ -109,9 +173,7 @@ export default function Dashboard() {
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 border-border/50">
-          <CardHeader>
-            <CardTitle className="text-base">Revenue vs Expenses</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle className="text-base">Revenue vs Expenses</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={revenueByMonth}>
@@ -125,18 +187,13 @@ export default function Dashboard() {
             </ResponsiveContainer>
           </CardContent>
         </Card>
-
         <Card className="border-border/50">
-          <CardHeader>
-            <CardTitle className="text-base">Revenue by Category</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle className="text-base">Revenue by Category</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie data={categoryData} cx="50%" cy="50%" outerRadius={100} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                  {categoryData.map((_, i) => (
-                    <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                  ))}
+                  {categoryData.map((_, i) => (<Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />))}
                 </Pie>
                 <Tooltip formatter={(value: number) => formatCurrency(value)} />
               </PieChart>
@@ -160,6 +217,7 @@ export default function Dashboard() {
                   <th className="text-left py-3 px-2 font-medium text-muted-foreground">Type</th>
                   <th className="text-left py-3 px-2 font-medium text-muted-foreground">Category</th>
                   <th className="text-right py-3 px-2 font-medium text-muted-foreground">Amount</th>
+                  <th className="text-right py-3 px-2 font-medium text-muted-foreground">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -176,6 +234,10 @@ export default function Dashboard() {
                     <td className={`py-3 px-2 text-right font-medium ${t.type === "revenue" ? "text-success" : "text-destructive"}`}>
                       {t.type === "revenue" ? "+" : "-"}{formatCurrency(t.amount)}
                     </td>
+                    <td className="py-3 px-2 text-right">
+                      <Button variant="ghost" size="sm" onClick={() => { setEditingTx(t); setShowTxForm(true); }}>Edit</Button>
+                      <Button variant="ghost" size="sm" className="text-destructive" onClick={() => deleteTx.mutate(t.id)}>Delete</Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -183,6 +245,89 @@ export default function Dashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Transaction Form Dialog */}
+      <Dialog open={showTxForm} onOpenChange={setShowTxForm}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingTx ? "Edit Transaction" : "Add Transaction"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleTxSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="type">Type</Label>
+                <Select name="type" defaultValue={editingTx?.type || "revenue"}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="revenue">Revenue</SelectItem>
+                    <SelectItem value="expense">Expense</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="date">Date</Label>
+                <Input id="date" name="date" type="date" defaultValue={editingTx?.date || new Date().toISOString().split("T")[0]} required />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="amount">Amount</Label>
+                <Input id="amount" name="amount" type="number" step="0.01" defaultValue={editingTx?.amount || ""} required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="category">Category</Label>
+                <Input id="category" name="category" defaultValue={editingTx?.category || ""} placeholder="e.g. product_sales" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea id="description" name="description" defaultValue={editingTx?.description || ""} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="channel">Channel</Label>
+                <Input id="channel" name="channel" defaultValue={editingTx?.channel || ""} placeholder="e.g. d2c, wholesale" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="order_id">Order ID</Label>
+                <Input id="order_id" name="order_id" defaultValue={editingTx?.order_id || ""} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="sku">SKU</Label>
+                <Input id="sku" name="sku" defaultValue={editingTx?.sku || ""} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="quantity">Quantity</Label>
+                <Input id="quantity" name="quantity" type="number" defaultValue={editingTx?.quantity || ""} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="shipping_cost">Shipping Cost</Label>
+                <Input id="shipping_cost" name="shipping_cost" type="number" step="0.01" defaultValue={editingTx?.shipping_cost || ""} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="unit_shipping_cost">Unit Shipping Cost</Label>
+                <Input id="unit_shipping_cost" name="unit_shipping_cost" type="number" step="0.01" defaultValue={editingTx?.unit_shipping_cost || ""} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="customer_id">Customer</Label>
+              <Select name="customer_id" defaultValue={editingTx?.customer_id || ""}>
+                <SelectTrigger><SelectValue placeholder="Select customer (optional)" /></SelectTrigger>
+                <SelectContent>
+                  {customers.map((c) => <SelectItem key={c.id} value={c.id}>{c.name} ({c.email})</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button type="submit" className="w-full" disabled={upsertTx.isPending}>
+              {editingTx ? "Update Transaction" : "Create Transaction"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

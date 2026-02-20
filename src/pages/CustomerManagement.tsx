@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Users, Search, DollarSign, ShoppingCart } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Users, Search, DollarSign, Download } from "lucide-react";
+import { exportToCSV } from "@/lib/exportUtils";
+import { toast } from "sonner";
 
 export default function CustomerManagement() {
   const [search, setSearch] = useState("");
@@ -28,7 +31,9 @@ export default function CustomerManagement() {
   const filtered = customers.filter((c) =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
     c.email.toLowerCase().includes(search.toLowerCase()) ||
-    (c.company && c.company.toLowerCase().includes(search.toLowerCase()))
+    (c.company && c.company.toLowerCase().includes(search.toLowerCase())) ||
+    (c.channel && c.channel.toLowerCase().includes(search.toLowerCase())) ||
+    (c.tags && c.tags.some((t) => t.toLowerCase().includes(search.toLowerCase())))
   );
 
   const getStats = (customer: any) => {
@@ -36,11 +41,36 @@ export default function CustomerManagement() {
     return { orders: ct.length, revenue: ct.reduce((s, t) => s + (t.amount || 0), 0) };
   };
 
+  const handleExport = () => {
+    exportToCSV(
+      filtered.map((c) => {
+        const stats = getStats(c);
+        return {
+          Name: c.name,
+          Email: c.email,
+          Company: c.company || "",
+          Channel: c.channel || "",
+          Status: c.status || "",
+          LTV: c.lifetime_value || 0,
+          Orders: stats.orders,
+          Revenue: stats.revenue,
+        };
+      }),
+      "customers"
+    );
+    toast.success("Customers exported");
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Customers</h1>
-        <p className="text-muted-foreground">Manage your customer relationships</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Customers</h1>
+          <p className="text-muted-foreground">Manage your customer relationships</p>
+        </div>
+        <Button variant="outline" onClick={handleExport}>
+          <Download className="h-4 w-4 mr-2" /> Export
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -73,9 +103,9 @@ export default function CustomerManagement() {
         </Card>
       </div>
 
-      <div className="relative max-w-sm">
+      <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Search customers..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
+        <Input placeholder="Search by name, email, company, channel, tags..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
       </div>
 
       <Card className="border-border/50">
@@ -101,12 +131,8 @@ export default function CustomerManagement() {
                       <td className="py-3 px-4 font-medium">{c.name}</td>
                       <td className="py-3 px-4 text-muted-foreground">{c.email}</td>
                       <td className="py-3 px-4">{c.company || "—"}</td>
-                      <td className="py-3 px-4">
-                        <Badge variant="secondary" className="capitalize">{c.channel}</Badge>
-                      </td>
-                      <td className="py-3 px-4">
-                        <Badge variant={c.status === "active" ? "default" : "secondary"}>{c.status}</Badge>
-                      </td>
+                      <td className="py-3 px-4"><Badge variant="secondary" className="capitalize">{c.channel}</Badge></td>
+                      <td className="py-3 px-4"><Badge variant={c.status === "active" ? "default" : "secondary"}>{c.status}</Badge></td>
                       <td className="py-3 px-4 text-right">{stats.orders}</td>
                       <td className="py-3 px-4 text-right font-medium">${stats.revenue.toLocaleString()}</td>
                     </tr>

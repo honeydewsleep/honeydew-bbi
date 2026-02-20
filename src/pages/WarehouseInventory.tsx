@@ -4,9 +4,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Package, Search, AlertTriangle, MapPin } from "lucide-react";
+import { Package, Search, AlertTriangle, MapPin, Download } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { exportToCSV } from "@/lib/exportUtils";
+import { toast } from "sonner";
 
 export default function WarehouseInventory() {
   const [search, setSearch] = useState("");
@@ -45,16 +48,16 @@ export default function WarehouseInventory() {
   const filtered = useMemo(() => {
     let result = products.filter((p) => p.is_active);
     if (search) {
-      result = result.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase()));
+      result = result.filter((p) =>
+        p.name.toLowerCase().includes(search.toLowerCase()) ||
+        p.sku.toLowerCase().includes(search.toLowerCase()) ||
+        (p.supplier && p.supplier.toLowerCase().includes(search.toLowerCase())) ||
+        (p.barcode && p.barcode.toLowerCase().includes(search.toLowerCase()))
+      );
     }
-    if (categoryFilter !== "all") {
-      result = result.filter((p) => p.category === categoryFilter);
-    }
-    if (stockFilter === "low") {
-      result = result.filter((p) => (p.current_stock || 0) <= (p.reorder_point || 10));
-    } else if (stockFilter === "out") {
-      result = result.filter((p) => (p.current_stock || 0) === 0);
-    }
+    if (categoryFilter !== "all") result = result.filter((p) => p.category === categoryFilter);
+    if (stockFilter === "low") result = result.filter((p) => (p.current_stock || 0) <= (p.reorder_point || 10));
+    else if (stockFilter === "out") result = result.filter((p) => (p.current_stock || 0) === 0);
     return result;
   }, [products, search, categoryFilter, stockFilter]);
 
@@ -70,14 +73,35 @@ export default function WarehouseInventory() {
     return { color: "default" as const, label: "In Stock" };
   };
 
+  const handleExport = () => {
+    exportToCSV(
+      filtered.map((p) => ({
+        SKU: p.sku,
+        Name: p.name,
+        Category: p.category || "",
+        Stock: p.current_stock || 0,
+        Reorder_Point: p.reorder_point || 10,
+        Cost: p.cost || 0,
+        Retail_Price: p.retail_price || 0,
+        Supplier: p.supplier || "",
+      })),
+      "inventory"
+    );
+    toast.success("Inventory exported");
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Warehouse Inventory</h1>
-        <p className="text-muted-foreground">Real-time stock levels and location tracking</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Warehouse Inventory</h1>
+          <p className="text-muted-foreground">Real-time stock levels and location tracking</p>
+        </div>
+        <Button variant="outline" onClick={handleExport}>
+          <Download className="h-4 w-4 mr-2" /> Export
+        </Button>
       </div>
 
-      {/* Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="border-border/50">
           <CardContent className="pt-6">
@@ -114,11 +138,10 @@ export default function WarehouseInventory() {
         </Card>
       </div>
 
-      {/* Filters */}
       <div className="flex gap-4 flex-wrap">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
+          <Input placeholder="Search by name, SKU, supplier, barcode..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
         </div>
         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
           <SelectTrigger className="w-[160px]"><SelectValue placeholder="Category" /></SelectTrigger>
@@ -137,7 +160,6 @@ export default function WarehouseInventory() {
         </Select>
       </div>
 
-      {/* Product Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filtered.map((p) => {
           const level = getStockLevel(p);
@@ -154,7 +176,6 @@ export default function WarehouseInventory() {
                   </div>
                   <Badge variant={level.color}>{level.label}</Badge>
                 </div>
-
                 <div>
                   <div className="flex justify-between text-sm mb-1">
                     <span className="text-muted-foreground">Stock Level</span>
@@ -162,7 +183,6 @@ export default function WarehouseInventory() {
                   </div>
                   <Progress value={stockPct} className="h-2" />
                 </div>
-
                 {productLocations.length > 0 && (
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" /> Locations</p>
@@ -177,7 +197,6 @@ export default function WarehouseInventory() {
                     })}
                   </div>
                 )}
-
                 <div className="flex justify-between text-sm text-muted-foreground">
                   <span>Cost: ${p.cost?.toFixed(2) || "0.00"}</span>
                   <span>Reorder: {p.reorder_point}</span>
