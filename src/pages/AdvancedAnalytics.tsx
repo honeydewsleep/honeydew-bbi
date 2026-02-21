@@ -1,12 +1,17 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { subDays, parseISO, isWithinInterval } from "date-fns";
+import DateRangePicker, { DateRange } from "@/components/DateRangePicker";
 
 const COLORS = ["hsl(221, 83%, 53%)", "hsl(262, 83%, 58%)", "hsl(142, 71%, 45%)", "hsl(38, 92%, 50%)", "hsl(0, 84%, 60%)"];
 
 export default function AdvancedAnalytics() {
+  const [dateRange, setDateRange] = useState<DateRange>({ from: subDays(new Date(), 90), to: new Date() });
+  const [comparisonRange, setComparisonRange] = useState<DateRange | null>(null);
+
   const { data: transactions = [] } = useQuery({
     queryKey: ["transactions"],
     queryFn: async () => {
@@ -31,19 +36,24 @@ export default function AdvancedAnalytics() {
     },
   });
 
+  const filterByRange = (txs: any[], range: DateRange) =>
+    txs.filter((t) => isWithinInterval(parseISO(t.date), { start: range.from, end: range.to }));
+
+  const filtered = useMemo(() => filterByRange(transactions, dateRange), [transactions, dateRange]);
+
   // Channel breakdown
   const channelData = useMemo(() => {
     const channels: Record<string, number> = {};
-    transactions.filter((t) => t.type === "revenue").forEach((t) => {
+    filtered.filter((t) => t.type === "revenue").forEach((t) => {
       channels[t.channel || "unknown"] = (channels[t.channel || "unknown"] || 0) + (t.amount || 0);
     });
     return Object.entries(channels).map(([name, value]) => ({ name, value }));
-  }, [transactions]);
+  }, [filtered]);
 
   // Top products by revenue
   const topProducts = useMemo(() => {
     const skuRevenue: Record<string, number> = {};
-    transactions.filter((t) => t.type === "revenue" && t.sku).forEach((t) => {
+    filtered.filter((t) => t.type === "revenue" && t.sku).forEach((t) => {
       skuRevenue[t.sku!] = (skuRevenue[t.sku!] || 0) + (t.amount || 0);
     });
     return Object.entries(skuRevenue)
@@ -53,7 +63,7 @@ export default function AdvancedAnalytics() {
       })
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 10);
-  }, [transactions, products]);
+  }, [filtered, products]);
 
   // Customer segments
   const customerSegments = useMemo(() => {
@@ -76,6 +86,13 @@ export default function AdvancedAnalytics() {
         <h1 className="text-2xl font-bold text-foreground">Advanced Analytics</h1>
         <p className="text-muted-foreground">Deep insights into your business performance</p>
       </div>
+
+      <DateRangePicker
+        dateRange={dateRange}
+        onDateRangeChange={setDateRange}
+        comparisonRange={comparisonRange}
+        onComparisonRangeChange={setComparisonRange}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="border-border/50">
