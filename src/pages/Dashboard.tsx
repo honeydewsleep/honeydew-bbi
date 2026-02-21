@@ -12,12 +12,20 @@ import { DollarSign, TrendingDown, TrendingUp, Users, Package, Wallet, Plus } fr
 import { subDays, parseISO, isWithinInterval, format, eachMonthOfInterval } from "date-fns";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { toast } from "sonner";
+import DateRangePicker, { DateRange } from "@/components/DateRangePicker";
 
 const CHART_COLORS = ["hsl(221, 83%, 53%)", "hsl(262, 83%, 58%)", "hsl(142, 71%, 45%)", "hsl(38, 92%, 50%)", "hsl(0, 84%, 60%)"];
 
+function pctChange(current: number, previous: number): string | null {
+  if (previous === 0) return null;
+  const pct = ((current - previous) / previous) * 100;
+  return `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
+}
+
 export default function Dashboard() {
   const queryClient = useQueryClient();
-  const [dateRange] = useState({ from: subDays(new Date(), 30), to: new Date() });
+  const [dateRange, setDateRange] = useState<DateRange>({ from: subDays(new Date(), 30), to: new Date() });
+  const [comparisonRange, setComparisonRange] = useState<DateRange | null>(null);
   const [showTxForm, setShowTxForm] = useState(false);
   const [editingTx, setEditingTx] = useState<any>(null);
 
@@ -94,20 +102,29 @@ export default function Dashboard() {
     });
   };
 
-  const filtered = useMemo(() => {
-    return transactions.filter((t) => {
+  const filterByRange = (txs: any[], range: DateRange) =>
+    txs.filter((t) => {
       const d = parseISO(t.date);
-      return isWithinInterval(d, { start: dateRange.from, end: dateRange.to });
+      return isWithinInterval(d, { start: range.from, end: range.to });
     });
-  }, [transactions, dateRange]);
+
+  const filtered = useMemo(() => filterByRange(transactions, dateRange), [transactions, dateRange]);
+  const compFiltered = useMemo(() => comparisonRange ? filterByRange(transactions, comparisonRange) : [], [transactions, comparisonRange]);
+
+  const calcMetrics = (txs: any[]) => {
+    const revenue = txs.filter((t) => t.type === "revenue").reduce((s, t) => s + (t.amount || 0), 0);
+    const expenses = txs.filter((t) => t.type === "expense").reduce((s, t) => s + (t.amount || 0), 0);
+    return { revenue, expenses, profit: revenue - expenses };
+  };
 
   const metrics = useMemo(() => {
-    const revenue = filtered.filter((t) => t.type === "revenue").reduce((s, t) => s + (t.amount || 0), 0);
-    const expenses = filtered.filter((t) => t.type === "expense").reduce((s, t) => s + (t.amount || 0), 0);
+    const m = calcMetrics(filtered);
     const activeCustomers = customers.filter((c) => c.status === "active").length;
     const lowStock = products.filter((p) => p.is_active && (p.current_stock || 0) <= (p.reorder_point || 10)).length;
-    return { revenue, expenses, profit: revenue - expenses, activeCustomers, lowStock };
+    return { ...m, activeCustomers, lowStock };
   }, [filtered, customers, products]);
+
+  const compMetrics = useMemo(() => comparisonRange ? calcMetrics(compFiltered) : null, [compFiltered, comparisonRange]);
 
   const revenueByMonth = useMemo(() => {
     if (!dateRange.from || !dateRange.to) return [];
@@ -134,17 +151,21 @@ export default function Dashboard() {
 
   const formatCurrency = (val: number) => `$${val.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
+  const revTrend = compMetrics ? pctChange(metrics.revenue, compMetrics.revenue) : null;
+  const expTrend = compMetrics ? pctChange(metrics.expenses, compMetrics.expenses) : null;
+  const profitTrend = compMetrics ? pctChange(metrics.profit, compMetrics.profit) : null;
+
   const metricCards = [
-    { title: "Revenue", value: formatCurrency(metrics.revenue), icon: DollarSign, trend: "+12%", color: "text-primary" },
-    { title: "Expenses", value: formatCurrency(metrics.expenses), icon: TrendingDown, trend: "-3%", color: "text-destructive" },
-    { title: "Profit", value: formatCurrency(metrics.profit), icon: Wallet, trend: "+8%", color: "text-success" },
+    { title: "Revenue", value: formatCurrency(metrics.revenue), icon: DollarSign, trend: revTrend, color: "text-primary" },
+    { title: "Expenses", value: formatCurrency(metrics.expenses), icon: TrendingDown, trend: expTrend, color: "text-destructive" },
+    { title: "Profit", value: formatCurrency(metrics.profit), icon: Wallet, trend: profitTrend, color: "text-success" },
     { title: "Active Customers", value: metrics.activeCustomers.toString(), icon: Users, color: "text-accent" },
     { title: "Low Stock Items", value: metrics.lowStock.toString(), icon: Package, color: metrics.lowStock > 0 ? "text-warning" : "text-success" },
   ];
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
           <p className="text-muted-foreground">Overview of your business performance</p>
@@ -153,6 +174,13 @@ export default function Dashboard() {
           <Plus className="h-4 w-4 mr-2" /> Add Transaction
         </Button>
       </div>
+
+      <DateRangePicker
+        dateRange={dateRange}
+        onDateRangeChange={setDateRange}
+        comparisonRange={comparisonRange}
+        onComparisonRangeChange={setComparisonRange}
+      />
 
       {/* Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -164,7 +192,7 @@ export default function Dashboard() {
                 <m.icon className={`h-4 w-4 ${m.color}`} />
               </div>
               <p className="text-2xl font-bold text-foreground">{m.value}</p>
-              {m.trend && <p className={`text-xs mt-1 ${m.trend.startsWith("+") ? "text-success" : "text-destructive"}`}>{m.trend} from last period</p>}
+              {m.trend && <p className={`text-xs mt-1 ${m.trend.startsWith("+") ? "text-success" : "text-destructive"}`}>{m.trend} vs prior period</p>}
             </CardContent>
           </Card>
         ))}

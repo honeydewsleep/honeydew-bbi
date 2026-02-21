@@ -7,14 +7,22 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ShoppingCart, Search, DollarSign, Download, RefreshCw, TrendingUp } from "lucide-react";
-import { format, parseISO, subDays } from "date-fns";
+import { format, parseISO, subDays, isWithinInterval } from "date-fns";
 import { exportToCSV } from "@/lib/exportUtils";
 import { toast } from "sonner";
+import DateRangePicker, { DateRange } from "@/components/DateRangePicker";
+
+function pctChange(current: number, previous: number): string | null {
+  if (previous === 0) return null;
+  const pct = ((current - previous) / previous) * 100;
+  return `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
+}
 
 export default function OrdersPage() {
   const [search, setSearch] = useState("");
   const [channelFilter, setChannelFilter] = useState("all");
-  const [dateFilter, setDateFilter] = useState("30");
+  const [dateRange, setDateRange] = useState<DateRange>({ from: subDays(new Date(), 30), to: new Date() });
+  const [comparisonRange, setComparisonRange] = useState<DateRange | null>(null);
   const [syncing, setSyncing] = useState(false);
 
   const { data: orders = [], refetch } = useQuery({
@@ -34,9 +42,8 @@ export default function OrdersPage() {
     return Array.from(set) as string[];
   }, [orders]);
 
-  const filtered = useMemo(() => {
-    const cutoff = subDays(new Date(), parseInt(dateFilter));
-    return orders.filter((o) => {
+  const filterOrders = (ordersArr: any[], range: DateRange) =>
+    ordersArr.filter((o) => {
       const matchSearch =
         !search ||
         o.description?.toLowerCase().includes(search.toLowerCase()) ||
@@ -45,18 +52,23 @@ export default function OrdersPage() {
         (o as any).customers?.name?.toLowerCase().includes(search.toLowerCase()) ||
         (o as any).customers?.email?.toLowerCase().includes(search.toLowerCase());
       const matchChannel = channelFilter === "all" || o.channel === channelFilter;
-      const matchDate = parseISO(o.date) >= cutoff;
+      const matchDate = isWithinInterval(parseISO(o.date), { start: range.from, end: range.to });
       return matchSearch && matchChannel && matchDate;
     });
-  }, [orders, search, channelFilter, dateFilter]);
 
-  const metrics = useMemo(() => {
-    const totalRevenue = filtered.reduce((s, o) => s + (o.amount || 0), 0);
-    const totalOrders = filtered.length;
-    const totalUnits = filtered.reduce((s, o) => s + (o.quantity || 0), 0);
+  const filtered = useMemo(() => filterOrders(orders, dateRange), [orders, search, channelFilter, dateRange]);
+  const compFiltered = useMemo(() => comparisonRange ? filterOrders(orders, comparisonRange) : [], [orders, search, channelFilter, comparisonRange]);
+
+  const calcMetrics = (arr: any[]) => {
+    const totalRevenue = arr.reduce((s, o) => s + (o.amount || 0), 0);
+    const totalOrders = arr.length;
+    const totalUnits = arr.reduce((s, o) => s + (o.quantity || 0), 0);
     const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
     return { totalRevenue, totalOrders, totalUnits, avgOrderValue };
-  }, [filtered]);
+  };
+
+  const metrics = useMemo(() => calcMetrics(filtered), [filtered]);
+  const compMetrics = useMemo(() => comparisonRange ? calcMetrics(compFiltered) : null, [compFiltered, comparisonRange]);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -75,15 +87,10 @@ export default function OrdersPage() {
   const handleExport = () => {
     exportToCSV(
       filtered.map((o) => ({
-        Date: o.date,
-        Order_ID: o.order_id || "",
-        SKU: o.sku || "",
-        Description: o.description || "",
-        Customer: (o as any).customers?.name || "",
-        Channel: o.channel || "",
-        Quantity: o.quantity || 0,
-        Amount: o.amount,
-        Shipping: o.shipping_cost || 0,
+        Date: o.date, Order_ID: o.order_id || "", SKU: o.sku || "",
+        Description: o.description || "", Customer: (o as any).customers?.name || "",
+        Channel: o.channel || "", Quantity: o.quantity || 0,
+        Amount: o.amount, Shipping: o.shipping_cost || 0,
       })),
       "orders"
     );
@@ -91,6 +98,13 @@ export default function OrdersPage() {
   };
 
   const fmt = (v: number) => `$${v.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+  const metricCards = [
+    { label: "Total Orders", value: metrics.totalOrders.toString(), icon: ShoppingCart, color: "text-primary", trend: compMetrics ? pctChange(metrics.totalOrders, compMetrics.totalOrders) : null },
+    { label: "Revenue", value: fmt(metrics.totalRevenue), icon: DollarSign, color: "text-success", trend: compMetrics ? pctChange(metrics.totalRevenue, compMetrics.totalRevenue) : null },
+    { label: "Avg Order Value", value: fmt(metrics.avgOrderValue), icon: TrendingUp, color: "text-accent", trend: compMetrics ? pctChange(metrics.avgOrderValue, compMetrics.avgOrderValue) : null },
+    { label: "Units Sold", value: metrics.totalUnits.toLocaleString(), icon: ShoppingCart, color: "text-primary", trend: compMetrics ? pctChange(metrics.totalUnits, compMetrics.totalUnits) : null },
+  ];
 
   return (
     <div className="space-y-6">
@@ -100,53 +114,32 @@ export default function OrdersPage() {
           <p className="text-muted-foreground">Monitor sales in real-time</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExport}>
-            <Download className="h-4 w-4 mr-2" /> Export
-          </Button>
-          <Button onClick={handleSync} disabled={syncing}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} /> Sync ShipStation
-          </Button>
+          <Button variant="outline" onClick={handleExport}><Download className="h-4 w-4 mr-2" /> Export</Button>
+          <Button onClick={handleSync} disabled={syncing}><RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} /> Sync ShipStation</Button>
         </div>
       </div>
 
+      <DateRangePicker
+        dateRange={dateRange}
+        onDateRangeChange={setDateRange}
+        comparisonRange={comparisonRange}
+        onComparisonRangeChange={setComparisonRange}
+      />
+
       {/* Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <Card className="border-border/50">
-          <CardContent className="pt-6 flex items-center gap-3">
-            <ShoppingCart className="h-5 w-5 text-primary" />
-            <div>
-              <p className="text-sm text-muted-foreground">Total Orders</p>
-              <p className="text-2xl font-bold">{metrics.totalOrders}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-border/50">
-          <CardContent className="pt-6 flex items-center gap-3">
-            <DollarSign className="h-5 w-5 text-success" />
-            <div>
-              <p className="text-sm text-muted-foreground">Revenue</p>
-              <p className="text-2xl font-bold">{fmt(metrics.totalRevenue)}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-border/50">
-          <CardContent className="pt-6 flex items-center gap-3">
-            <TrendingUp className="h-5 w-5 text-accent" />
-            <div>
-              <p className="text-sm text-muted-foreground">Avg Order Value</p>
-              <p className="text-2xl font-bold">{fmt(metrics.avgOrderValue)}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-border/50">
-          <CardContent className="pt-6 flex items-center gap-3">
-            <ShoppingCart className="h-5 w-5 text-primary" />
-            <div>
-              <p className="text-sm text-muted-foreground">Units Sold</p>
-              <p className="text-2xl font-bold">{metrics.totalUnits.toLocaleString()}</p>
-            </div>
-          </CardContent>
-        </Card>
+        {metricCards.map((m) => (
+          <Card key={m.label} className="border-border/50">
+            <CardContent className="pt-6 flex items-center gap-3">
+              <m.icon className={`h-5 w-5 ${m.color}`} />
+              <div>
+                <p className="text-sm text-muted-foreground">{m.label}</p>
+                <p className="text-2xl font-bold">{m.value}</p>
+                {m.trend && <p className={`text-xs ${m.trend.startsWith("+") ? "text-success" : "text-destructive"}`}>{m.trend} vs prior</p>}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Filters */}
@@ -160,15 +153,6 @@ export default function OrdersPage() {
           <SelectContent>
             <SelectItem value="all">All Channels</SelectItem>
             {channels.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={dateFilter} onValueChange={setDateFilter}>
-          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Date Range" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="7">Last 7 days</SelectItem>
-            <SelectItem value="30">Last 30 days</SelectItem>
-            <SelectItem value="90">Last 90 days</SelectItem>
-            <SelectItem value="365">Last year</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -199,20 +183,14 @@ export default function OrdersPage() {
                     <td className="py-3 px-4">{(o as any).customers?.name || "—"}</td>
                     <td className="py-3 px-4 font-mono text-xs">{o.sku || "—"}</td>
                     <td className="py-3 px-4 max-w-[200px] truncate">{o.description || "—"}</td>
-                    <td className="py-3 px-4">
-                      <Badge variant="secondary" className="capitalize">{o.channel || "—"}</Badge>
-                    </td>
+                    <td className="py-3 px-4"><Badge variant="secondary" className="capitalize">{o.channel || "—"}</Badge></td>
                     <td className="py-3 px-4 text-right">{o.quantity || "—"}</td>
                     <td className="py-3 px-4 text-right font-medium text-success">{fmt(o.amount)}</td>
                     <td className="py-3 px-4 text-right text-muted-foreground">{o.shipping_cost ? fmt(o.shipping_cost) : "—"}</td>
                   </tr>
                 ))}
                 {filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={9} className="py-12 text-center text-muted-foreground">
-                      No orders found. Try syncing with ShipStation or adjusting filters.
-                    </td>
-                  </tr>
+                  <tr><td colSpan={9} className="py-12 text-center text-muted-foreground">No orders found. Try syncing with ShipStation or adjusting filters.</td></tr>
                 )}
               </tbody>
             </table>
