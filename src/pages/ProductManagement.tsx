@@ -9,9 +9,106 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Package, Edit, Trash2, Download } from "lucide-react";
+import { Plus, Search, Package, Edit, Trash2, Download, Link, X } from "lucide-react";
 import { toast } from "sonner";
 import { exportToCSV } from "@/lib/exportUtils";
+
+function SkuMappingsSection({ product }: { product: any }) {
+  const queryClient = useQueryClient();
+  const [newCustomerSku, setNewCustomerSku] = useState("");
+  const [newCustomerName, setNewCustomerName] = useState("");
+
+  const { data: mappings = [] } = useQuery({
+    queryKey: ["sku_mappings", product.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("sku_mappings")
+        .select("*")
+        .eq("product_id", product.id)
+        .order("customer_name");
+      return data || [];
+    },
+  });
+
+  const addMapping = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("sku_mappings").insert({
+        product_id: product.id,
+        internal_sku: product.sku,
+        customer_sku: newCustomerSku,
+        customer_name: newCustomerName || null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sku_mappings", product.id] });
+      queryClient.invalidateQueries({ queryKey: ["sku_mappings"] });
+      setNewCustomerSku("");
+      setNewCustomerName("");
+      toast.success("SKU mapping added");
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const deleteMapping = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("sku_mappings").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sku_mappings", product.id] });
+      queryClient.invalidateQueries({ queryKey: ["sku_mappings"] });
+      toast.success("Mapping removed");
+    },
+  });
+
+  return (
+    <div className="space-y-3 border-t border-border pt-4">
+      <Label className="flex items-center gap-1.5">
+        <Link className="h-3.5 w-3.5" /> Retailer / Alternate SKUs
+      </Label>
+      <p className="text-xs text-muted-foreground">
+        Map external SKUs (e.g. retailer-specific) to this product so sales data is consolidated.
+      </p>
+      {mappings.length > 0 && (
+        <div className="space-y-1.5">
+          {mappings.map((m: any) => (
+            <div key={m.id} className="flex items-center gap-2 text-sm bg-muted/50 rounded-md px-3 py-1.5">
+              <span className="font-mono font-medium">{m.customer_sku}</span>
+              {m.customer_name && <span className="text-muted-foreground">({m.customer_name})</span>}
+              <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto" onClick={() => deleteMapping.mutate(m.id)}>
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <Input
+          placeholder="Retailer SKU"
+          value={newCustomerSku}
+          onChange={(e) => setNewCustomerSku(e.target.value)}
+          className="flex-1"
+        />
+        <Input
+          placeholder="Retailer name (optional)"
+          value={newCustomerName}
+          onChange={(e) => setNewCustomerName(e.target.value)}
+          className="flex-1"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={!newCustomerSku.trim() || addMapping.isPending}
+          onClick={() => addMapping.mutate()}
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export default function ProductManagement() {
   const queryClient = useQueryClient();
@@ -26,6 +123,8 @@ export default function ProductManagement() {
       return data || [];
     },
   });
+
+  // ... keep existing code (upsertProduct, deleteProduct, filtered, handleSubmit, handleExport)
 
   const upsertProduct = useMutation({
     mutationFn: async (data: any) => {
@@ -165,7 +264,7 @@ export default function ProductManagement() {
       </div>
 
       <Dialog open={showForm} onOpenChange={setShowForm}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit Product" : "Add Product"}</DialogTitle>
           </DialogHeader>
@@ -220,6 +319,10 @@ export default function ProductManagement() {
               <Label htmlFor="description">Description</Label>
               <Textarea id="description" name="description" defaultValue={editing?.description || ""} />
             </div>
+
+            {/* SKU Mappings - only shown when editing an existing product */}
+            {editing && <SkuMappingsSection product={editing} />}
+
             <Button type="submit" className="w-full" disabled={upsertProduct.isPending}>
               {editing ? "Update Product" : "Create Product"}
             </Button>
