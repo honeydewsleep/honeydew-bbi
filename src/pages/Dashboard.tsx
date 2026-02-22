@@ -111,17 +111,33 @@ export default function Dashboard() {
   const filtered = useMemo(() => filterByRange(transactions, dateRange), [transactions, dateRange]);
   const compFiltered = useMemo(() => comparisonRange ? filterByRange(transactions, comparisonRange) : [], [transactions, comparisonRange]);
 
-  const productCostMap = useMemo(() => {
+  const { data: skuMappings = [] } = useQuery({
+    queryKey: ["sku_mappings"],
+    queryFn: async () => {
+      const { data } = await supabase.from("sku_mappings").select("*");
+      return data || [];
+    },
+  });
+
+  // Build a map: any SKU (internal or customer) → product cost
+  const skuCostMap = useMemo(() => {
     const map: Record<string, number> = {};
+    // Internal SKUs
     products.forEach((p) => { if (p.sku && p.cost != null) map[p.sku] = p.cost; });
+    // Customer/retailer SKUs → same cost as the mapped internal product
+    skuMappings.forEach((m: any) => {
+      if (m.customer_sku && m.internal_sku && map[m.internal_sku] != null) {
+        map[m.customer_sku] = map[m.internal_sku];
+      }
+    });
     return map;
-  }, [products]);
+  }, [products, skuMappings]);
 
   const calcMetrics = (txs: any[]) => {
     const revenue = txs.filter((t) => t.type === "revenue").reduce((s, t) => s + (t.amount || 0), 0);
     const expenses = txs.filter((t) => t.type === "expense").reduce((s, t) => s + (t.amount || 0), 0);
     const cogs = txs.filter((t) => t.type === "revenue" && t.sku && t.quantity).reduce((s, t) => {
-      const unitCost = productCostMap[t.sku] || 0;
+      const unitCost = skuCostMap[t.sku] || 0;
       return s + unitCost * (t.quantity || 0);
     }, 0);
     const grossProfit = revenue - cogs;
