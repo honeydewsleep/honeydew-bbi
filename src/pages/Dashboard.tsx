@@ -111,10 +111,22 @@ export default function Dashboard() {
   const filtered = useMemo(() => filterByRange(transactions, dateRange), [transactions, dateRange]);
   const compFiltered = useMemo(() => comparisonRange ? filterByRange(transactions, comparisonRange) : [], [transactions, comparisonRange]);
 
+  const productCostMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    products.forEach((p) => { if (p.sku && p.cost != null) map[p.sku] = p.cost; });
+    return map;
+  }, [products]);
+
   const calcMetrics = (txs: any[]) => {
     const revenue = txs.filter((t) => t.type === "revenue").reduce((s, t) => s + (t.amount || 0), 0);
     const expenses = txs.filter((t) => t.type === "expense").reduce((s, t) => s + (t.amount || 0), 0);
-    return { revenue, expenses, profit: revenue - expenses };
+    const cogs = txs.filter((t) => t.type === "revenue" && t.sku && t.quantity).reduce((s, t) => {
+      const unitCost = productCostMap[t.sku] || 0;
+      return s + unitCost * (t.quantity || 0);
+    }, 0);
+    const grossProfit = revenue - cogs;
+    const grossMargin = revenue > 0 ? (grossProfit / revenue) * 100 : 0;
+    return { revenue, expenses, cogs, grossProfit, grossMargin, netProfit: revenue - cogs - expenses };
   };
 
   const metrics = useMemo(() => {
@@ -152,13 +164,15 @@ export default function Dashboard() {
   const formatCurrency = (val: number) => `$${val.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
   const revTrend = compMetrics ? pctChange(metrics.revenue, compMetrics.revenue) : null;
-  const expTrend = compMetrics ? pctChange(metrics.expenses, compMetrics.expenses) : null;
-  const profitTrend = compMetrics ? pctChange(metrics.profit, compMetrics.profit) : null;
+  const cogsTrend = compMetrics ? pctChange(metrics.cogs, compMetrics.cogs) : null;
+  const gpTrend = compMetrics ? pctChange(metrics.grossProfit, compMetrics.grossProfit) : null;
+  const gmTrend = compMetrics ? pctChange(metrics.grossMargin, compMetrics.grossMargin) : null;
 
   const metricCards = [
     { title: "Revenue", value: formatCurrency(metrics.revenue), icon: DollarSign, trend: revTrend, color: "text-primary" },
-    { title: "Expenses", value: formatCurrency(metrics.expenses), icon: TrendingDown, trend: expTrend, color: "text-destructive" },
-    { title: "Profit", value: formatCurrency(metrics.profit), icon: Wallet, trend: profitTrend, color: "text-success" },
+    { title: "COGS", value: formatCurrency(metrics.cogs), icon: TrendingDown, trend: cogsTrend, color: "text-destructive" },
+    { title: "Gross Profit", value: formatCurrency(metrics.grossProfit), icon: Wallet, trend: gpTrend, color: "text-success" },
+    { title: "Gross Margin", value: `${metrics.grossMargin.toFixed(1)}%`, icon: TrendingUp, trend: gmTrend, color: "text-primary" },
     { title: "Active Customers", value: metrics.activeCustomers.toString(), icon: Users, color: "text-accent" },
     { title: "Low Stock Items", value: metrics.lowStock.toString(), icon: Package, color: metrics.lowStock > 0 ? "text-warning" : "text-success" },
   ];
@@ -183,7 +197,7 @@ export default function Dashboard() {
       />
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {metricCards.map((m) => (
           <Card key={m.title} className="border-border/50">
             <CardContent className="pt-6">
