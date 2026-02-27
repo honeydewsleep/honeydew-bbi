@@ -101,8 +101,12 @@ export function AppSidebar() {
       <SidebarFooter className="p-4">
         {!collapsed && profile && (
           <div className="mb-3 px-2 flex items-center gap-2">
-            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-sidebar-accent text-sidebar-foreground text-xs font-semibold shrink-0">
-              {(profile.full_name || profile.email || "?").charAt(0).toUpperCase()}
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-sidebar-accent text-sidebar-foreground text-xs font-semibold shrink-0 overflow-hidden">
+              {profile.avatar_url ? (
+                <img src={`${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/avatars/${profile.avatar_url}`} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                (profile.full_name || profile.email || "?").charAt(0).toUpperCase()
+              )}
             </div>
             <div className="min-w-0">
               <p className="text-sm font-medium text-sidebar-foreground truncate">{profile.full_name || profile.email}</p>

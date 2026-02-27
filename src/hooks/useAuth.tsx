@@ -7,6 +7,7 @@ type AppRole = "admin" | "executive" | "warehouse" | "fulfillment" | null;
 interface Profile {
   full_name: string;
   email: string;
+  avatar_url: string | null;
 }
 
 interface AuthContextType {
@@ -30,7 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUserData = async (userId: string) => {
     const [profileRes, roleRes] = await Promise.all([
-      supabase.from("profiles").select("full_name, email").eq("user_id", userId).single(),
+      supabase.from("profiles").select("full_name, email, avatar_url").eq("user_id", userId).single(),
       supabase.rpc("get_user_role", { _user_id: userId }),
     ]);
     if (profileRes.data) setProfile(profileRes.data);

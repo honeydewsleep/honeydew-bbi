@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -7,8 +7,75 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Settings, Building2, Package, Bell } from "lucide-react";
+import { Settings, Building2, Package, Bell, User, Upload, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
+
+function AvatarUploadSection() {
+  const { user, profile } = useAuth();
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const avatarUrl = profile?.avatar_url
+    ? `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/avatars/${profile.avatar_url}`
+    : null;
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    setUploading(true);
+    try {
+      const ext = file.name.split(".").pop();
+      const path = `${user.id}/avatar.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(path, file, { upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: path })
+        .eq("user_id", user.id);
+      if (updateError) throw updateError;
+
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+      toast.success("Avatar updated");
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <Card className="border-border/50">
+      <CardHeader>
+        <CardTitle>Profile Picture</CardTitle>
+        <CardDescription>Upload an avatar for your account</CardDescription>
+      </CardHeader>
+      <CardContent className="flex items-center gap-6">
+        <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0 border-2 border-border">
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+          ) : (
+            <User className="w-8 h-8 text-muted-foreground" />
+          )}
+        </div>
+        <div className="space-y-2">
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
+          <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+            {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+            {uploading ? "Uploading..." : "Upload Photo"}
+          </Button>
+          <p className="text-xs text-muted-foreground">JPG, PNG or WebP. Max 2MB.</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function SettingsPage() {
   const queryClient = useQueryClient();
@@ -82,12 +149,17 @@ export default function SettingsPage() {
         <p className="text-muted-foreground">Configure your application</p>
       </div>
 
-      <Tabs defaultValue="business" className="space-y-6">
+      <Tabs defaultValue="account" className="space-y-6">
         <TabsList>
+          <TabsTrigger value="account" className="flex items-center gap-2"><User className="h-4 w-4" /> Account</TabsTrigger>
           <TabsTrigger value="business" className="flex items-center gap-2"><Building2 className="h-4 w-4" /> Business</TabsTrigger>
           <TabsTrigger value="inventory" className="flex items-center gap-2"><Package className="h-4 w-4" /> Inventory</TabsTrigger>
           <TabsTrigger value="notifications" className="flex items-center gap-2"><Bell className="h-4 w-4" /> Notifications</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="account">
+          <AvatarUploadSection />
+        </TabsContent>
 
         <TabsContent value="business">
           <Card className="border-border/50">
