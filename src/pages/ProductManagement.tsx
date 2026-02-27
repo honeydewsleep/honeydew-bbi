@@ -9,9 +9,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Package, Edit, Trash2, Download, Link, X } from "lucide-react";
+import { Plus, Search, Package, Edit, Trash2, Download, Upload, Link, X } from "lucide-react";
 import { toast } from "sonner";
 import { exportToCSV } from "@/lib/exportUtils";
+import ProductImportDialog from "@/components/ProductImportDialog";
 
 function SkuMappingsSection({ product }: { product: any }) {
   const queryClient = useQueryClient();
@@ -115,7 +116,7 @@ export default function ProductManagement() {
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any>(null);
-
+  const [showImport, setShowImport] = useState(false);
   const { data: products = [], isLoading } = useQuery({
     queryKey: ["products"],
     queryFn: async () => {
@@ -213,6 +214,9 @@ export default function ProductManagement() {
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleExport}>
             <Download className="h-4 w-4 mr-2" /> Export
+          </Button>
+          <Button variant="outline" onClick={() => setShowImport(true)}>
+            <Upload className="h-4 w-4 mr-2" /> Import
           </Button>
           <Button onClick={() => { setEditing(null); setShowForm(true); }}>
             <Plus className="h-4 w-4 mr-2" /> Add Product
@@ -329,6 +333,8 @@ export default function ProductManagement() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <ProductImportDialog open={showImport} onOpenChange={setShowImport} />
     </div>
   );
 }
