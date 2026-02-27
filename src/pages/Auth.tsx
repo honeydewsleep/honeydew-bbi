@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { BarChart3, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import honeydewLogo from "@/assets/honeydew-bbi-logo.png";
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -47,11 +48,9 @@ export default function Auth() {
       <div className="w-full max-w-md space-y-8">
         {/* Logo */}
         <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary text-primary-foreground mb-4">
-            <BarChart3 className="h-7 w-7" />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">FinFlow</h1>
-          <p className="text-muted-foreground">Business Intelligence Dashboard</p>
+          <img src={honeydewLogo} alt="Honeydew BBI" className="w-16 h-16 mx-auto mb-4 rounded-2xl" />
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Honeydew BBI</h1>
+          <p className="text-muted-foreground">Bird's Eye Business Intelligence</p>
         </div>
 
         <Card className="border-border/50 shadow-xl">

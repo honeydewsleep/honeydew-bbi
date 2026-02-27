@@ -1,4 +1,5 @@
 import {
+  BarChart3,
   LayoutDashboard,
   Package,
   FileText,
@@ -6,12 +7,12 @@ import {
   Users,
   History,
   Settings,
-  BarChart3,
   LogOut,
   ArrowLeftRight,
   BookOpen,
   ShoppingCart,
 } from "lucide-react";
+import honeydewLogo from "@/assets/honeydew-bbi-logo.png";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -81,10 +82,13 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-            <BarChart3 className="h-4 w-4" />
-          </div>
-          {!collapsed && <span className="text-lg font-bold text-sidebar-foreground">FinFlow</span>}
+          <img src={honeydewLogo} alt="Honeydew BBI" className="w-8 h-8 rounded-lg" />
+          {!collapsed && (
+            <div className="flex flex-col leading-tight">
+              <span className="text-sm font-bold text-sidebar-foreground">Honeydew BBI</span>
+              <span className="text-[10px] text-sidebar-foreground/50">Bird's Eye Intelligence</span>
+            </div>
+          )}
         </div>
       </SidebarHeader>
 
