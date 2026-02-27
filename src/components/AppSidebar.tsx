@@ -86,7 +86,7 @@ export function AppSidebar() {
           {!collapsed && (
             <div className="flex flex-col leading-tight">
               <span className="text-sm font-bold text-sidebar-foreground">Honeydew BBI</span>
-              <span className="text-[10px] text-sidebar-foreground/50">Bird's Eye Intelligence</span>
+              <span className="text-[10px] text-sidebar-foreground/50"><em>Bird'sEye</em> Business Intelligence</span>
             </div>
           )}
         </div>
@@ -100,9 +100,14 @@ export function AppSidebar() {
 
       <SidebarFooter className="p-4">
         {!collapsed && profile && (
-          <div className="mb-3 px-2">
-            <p className="text-sm font-medium text-sidebar-foreground truncate">{profile.full_name || profile.email}</p>
-            <p className="text-xs text-sidebar-foreground/60 capitalize">{role || "No role"}</p>
+          <div className="mb-3 px-2 flex items-center gap-2">
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-sidebar-accent text-sidebar-foreground text-xs font-semibold shrink-0">
+              {(profile.full_name || profile.email || "?").charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-sidebar-foreground truncate">{profile.full_name || profile.email}</p>
+              <p className="text-xs text-sidebar-foreground/60 capitalize">{role || "No role"}</p>
+            </div>
           </div>
         )}
         <Button variant="ghost" size={collapsed ? "icon" : "default"} onClick={signOut} className="w-full text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent">
